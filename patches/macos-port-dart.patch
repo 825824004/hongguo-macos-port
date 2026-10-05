@@ -1,0 +1,138 @@
+diff --git a/lib/core_bridge.dart b/lib/core_bridge.dart
+index e3cc90a..8ff9f5e 100644
+--- a/lib/core_bridge.dart
++++ b/lib/core_bridge.dart
+@@ -25,18 +25,54 @@ typedef _DartRequest = Pointer<Utf8> Function(Pointer<Utf8>);
+ typedef _NativeFree = Void Function(Pointer<Utf8>);
+ typedef _DartFree = void Function(Pointer<Utf8>);
+ 
+-String _nativeRequest(String body) {
+-  final DynamicLibrary library;
++/// 打开 macOS 下的本地核心。
++///
++/// dylib 被打包进 .app/Contents/Frameworks，并带有 @rpath 安装名，
++/// 因此优先让 dyld 自行解析；解析不到时再按常见位置逐一尝试。
++DynamicLibrary _openMacCore() {
++  const names = ['libduanju_core.dylib', 'duanju_core.dylib'];
++  final bundle = Platform.resolvedExecutable;
++  final roots = <String>[
++    path.dirname(bundle),
++    path.join(path.dirname(bundle), 'Frameworks'),
++    path.join(path.dirname(bundle), 'MacOS'),
++    path.join(path.dirname(path.dirname(bundle)), 'Frameworks'),
++  ];
++  final attempts = <String>['@rpath/libduanju_core.dylib', ...names];
++  for (final name in attempts) {
++    for (final root in roots) {
++      final candidate = path.join(root, name);
++      try {
++        if (name.startsWith('@rpath') || File(candidate).existsSync()) {
++          return DynamicLibrary.open(candidate);
++        }
++      } catch (_) {
++        continue;
++      }
++    }
++  }
++  try {
++    return DynamicLibrary.process();
++  } catch (_) {
++    throw StateError(
++      '未能加载本地核心 libduanju_core.dylib，请确认应用包内 Frameworks 目录存在该文件。',
++    );
++  }
++}
++
++String _nativeRequest(String body) {  final DynamicLibrary library;
+   if (Platform.isAndroid) {
+     library = DynamicLibrary.open('libduanju_core.so');
+   } else if (Platform.isWindows) {
+     library = DynamicLibrary.open(
+       path.join(path.dirname(Platform.resolvedExecutable), 'duanju_core.dll'),
+     );
++  } else if (Platform.isMacOS) {
++    library = _openMacCore();
+   } else if (Platform.isIOS) {
+     library = DynamicLibrary.process();
+   } else {
+-    throw UnsupportedError('当前首版支持 Android 手机和 Windows 电脑');
++    throw UnsupportedError('当前支持 Android、Windows 与 macOS');
+   }
+   final request = library.lookupFunction<_NativeRequest, _DartRequest>(
+     'DuanjuRequest',
+diff --git a/lib/lan_controller.dart b/lib/lan_controller.dart
+index 5d29093..a796725 100644
+--- a/lib/lan_controller.dart
++++ b/lib/lan_controller.dart
+@@ -136,7 +136,11 @@ class LanController extends ChangeNotifier with WidgetsBindingObserver {
+     return switch (kind) {
+       'tv' => '电视',
+       'computer' => '电脑',
+-      _ => Platform.isIOS ? 'iPhone' : 'Android 手机',
++      _ => Platform.isIOS
++          ? 'iPhone'
++          : Platform.isMacOS
++          ? 'Mac'
++          : 'Android 手机',
+     };
+   }
+ 
+diff --git a/lib/main.dart b/lib/main.dart
+index a698e46..f2c74c1 100644
+--- a/lib/main.dart
++++ b/lib/main.dart
+@@ -29,8 +29,13 @@ Future<void> main(List<String> arguments) async {
+     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+     SystemChrome.setSystemUIOverlayStyle(AppTheme.systemBars(Brightness.dark));
+   }
+-  if (Platform.isWindows) {
++  if (Platform.isWindows || Platform.isMacOS) {
+     await windowManager.ensureInitialized();
++    if (Platform.isMacOS) {
++      await windowManager.setMinimumSize(const Size(900, 600));
++      await windowManager.setSize(const Size(1180, 760));
++      await windowManager.center();
++    }
+   }
+   MediaKit.ensureInitialized();
+   VideoEnhancementAssets.registerLicenses();
+@@ -127,7 +132,7 @@ class _AppBootstrapState extends State<AppBootstrap>
+             store!,
+             kind: device.television
+                 ? 'tv'
+-                : Platform.isWindows
++                : Platform.isWindows || Platform.isMacOS
+                 ? 'computer'
+                 : 'phone',
+           );
+diff --git a/lib/player_screen.dart b/lib/player_screen.dart
+index dcebf72..7e18601 100644
+--- a/lib/player_screen.dart
++++ b/lib/player_screen.dart
+@@ -194,7 +194,7 @@ class _PlayerScreenState extends State<PlayerScreen>
+         ? VideoController(
+             _player,
+             configuration: VideoControllerConfiguration(
+-              enableHardwareAcceleration: !Platform.isIOS,
++              enableHardwareAcceleration: !Platform.isIOS && !Platform.isMacOS,
+             ),
+           )
+         : null;
+@@ -1147,7 +1147,7 @@ class _PlayerScreenState extends State<PlayerScreen>
+       _automaticFullscreenSuppressed = !fullscreen;
+     });
+     try {
+-      if (Platform.isWindows) {
++      if (Platform.isWindows || Platform.isMacOS) {
+         await windowManager.setFullScreen(fullscreen);
+       } else if (_mobile) {
+         await (_orientationController?.setPlayback(
+@@ -1481,7 +1481,7 @@ class _PlayerScreenState extends State<PlayerScreen>
+         await _player.dispose();
+       }),
+     );
+-    if (Platform.isWindows) {
++    if (Platform.isWindows || Platform.isMacOS) {
+       unawaited(windowManager.setFullScreen(false));
+     } else if (_mobile || _television && Platform.isAndroid) {
+       unawaited(

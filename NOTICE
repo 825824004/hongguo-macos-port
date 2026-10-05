@@ -1,0 +1,94 @@
+# 第三方组件与来源说明
+
+本文件记录 `hongguo-macos-port` 仓库中涉及的第三方组件、来源与许可情况。
+
+## 本仓库包含的内容
+
+| 目录 / 文件 | 性质 | 说明 |
+| --- | --- | --- |
+| `macos-platform/` | 本人编写 | macOS 平台工程配置，基于 Flutter 官方模板生成后修改 |
+| `patches/macos-port-dart.patch` | 本人编写 | 仅为适配 macOS 所需的最小改动，不含上游完整源码 |
+| `scripts/build-macos.sh` | 本人编写 | 构建与 ad-hoc 签名脚本 |
+| `scripts/env.sh` | 本人编写 | 构建环境变量 |
+| `README.md`、`LICENSE`、`NOTICE` | 本人编写 | 说明与声明文档 |
+
+## 本仓库不包含的内容
+
+以下均属上游项目 `zhoufuweigg/guoapp` 的内容，**本仓库不予分发**：
+
+- `lib/`、`native/`、`android/`、`ios/`、`windows/` 目录
+- 上游的 `README.md`、`AGENTS.md`、`pubspec.yaml`、`scripts/`（原始版本）
+- 任何预编译二进制文件
+
+## 上游项目
+
+| 项目 | 内容 |
+| --- | --- |
+| 名称 | 红果鉴 / 真果鉴（Flutter 多端短剧客户端） |
+| 仓库 | https://github.com/zhoufuweigg/guoapp |
+| 基线 commit | `0e60928514c31a96ade9b31866948f15da5ca2a6` |
+| 版本 | `0.2.64+71` |
+| 许可 | **无**。仓库内无 LICENSE 文件，`pubspec.yaml` 未声明 `license` 字段 |
+
+### 许可状态说明
+
+上游 README 原文：
+
+> 本项目源码来自网上大名鼎鼎的**鱼佬**（原作者）。我只是把它拿来打包、测试着玩，
+> 方便自己用，**不保证任何可用性，随时可能删库**。
+
+由此可知：
+
+1. 上游未以任何开源许可证授权，著作权人保留全部权利
+2. 上游本身也是第三方代码的二次整理，原始权利归属不清
+3. **在原作者补充明确许可协议之前，不得重新分发上游源码**
+
+本仓库因此仅发布本人独立编写的移植工程成果。若需使用完整应用，请自行克隆上游仓库。
+
+## 构建期依赖（不随本仓库分发）
+
+以下工具仅在本地构建时使用，其许可归各自项目所有：
+
+| 组件 | 版本 | 许可 |
+| --- | --- | --- |
+| Flutter SDK | 3.47.6 | BSD-3-Clause |
+| Go | 1.24.6 | BSD-3-Clause |
+| Xcode | 27.0 | Apple SDK License Agreement |
+| CocoaPods | 1.16.2 | MIT |
+| Ruby | 4.0.7 | Ruby License / BSD-2-Clause |
+| Homebrew | 7.0.8 | BSD-2-Clause |
+
+## 上游应用运行期依赖（仅说明，本仓库不分发其代码）
+
+移植过程中确认以下依赖支持 macOS，此处仅作技术记录：
+
+| 组件 | 版本 | 许可 |
+| --- | --- | --- |
+| media_kit / media_kit_video | 1.2.6 / 2.0.1 | MIT |
+| media_kit_libs_video（libmpv） | 1.0.7 | MIT（libmpv 部分为 LGPL/GPL） |
+| ffmpeg_kit_flutter_new_min_gpl | 2.6.2 | **GPL / LGPL（min-gpl）** |
+| video_player_avfoundation | 2.12.0 | BSD-3-Clause |
+| path_provider / shared_preferences | — | BSD-3-Clause |
+| window_manager | 0.5.2 | MIT |
+| nsd | 5.0.1 | MIT |
+| bogdanfinn/tls-client（Go 核心） | 1.16.0 | MIT |
+| bogdanfinn/fhttp（Go 核心） | 0.6.9 | MIT |
+
+### 关于 FFmpegKit 的 GPL 影响
+
+上游使用 `ffmpeg_kit_flutter_new_min_gpl`（min-gpl 变体）。FFmpegKit 项目已停止维护，
+其 macOS 预编译 framework 包含 GPL 媒体组件。
+
+这意味着：
+
+1. **本仓库不分发任何 FFmpegKit 二进制文件**，仅在文档中提及
+2. 编译产物 `duanjuapp.app` 是本人在本地生成的个人使用产物
+3. 若要分发编译产物，需自行评估 GPL 兼容性（尤其涉及静态/动态链接与源码提供义务）
+4. 上游 README 称「FFmpegKit 不参与正常播放或下载的转码」，但这不改变其许可证事实
+
+## 内容合规
+
+- 本移植成果仅供个人学习与技术交流使用
+- 应用内的第三方站源内容版权归各自权利人所有
+- 使用时应遵守所在地法律法规与相应版权规定
+- 请勿将本成果用于商业分发

@@ -1,0 +1,53 @@
+MIT License
+
+Copyright (c) 2026 hongguo-macos-port contributors
+
+本仓库仅包含 macOS 移植工程成果（平台配置、补丁、构建脚本、文档），
+不包含上游 zhoufuweigg/guoapp 的应用源码。
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+上游项目说明 / UPSTREAM NOTICE
+
+本移植工作基于以下上游项目：
+
+    项目名称：红果鉴 / 真果鉴（duanju_app）
+    上游仓库：https://github.com/zhoufuweigg/guoapp
+    基线 commit：0e60928514c31a96ade9b31866948f15da5ca2a6
+    版本：0.2.64+71
+
+重要提示：
+
+1. 上游仓库未附带任何 LICENSE 文件，其 pubspec.yaml 亦未声明 license 字段。
+   依据著作权法，未声明许可意味着著作权人保留全部权利。
+
+2. 上游 README 声明「本项目源码来自网上大名鼎鼎的鱼佬（原作者）」，
+   原始权利归属并不清晰。
+
+3. 因此本仓库采取如下处理：
+   - NOT 发布上游的 lib/、native/、android/、ios/、windows/ 源码
+   - 仅发布本移植者独立编写的工程配置、patch、脚本与文档
+   - patch 中仅包含为适配 macOS 所需的最小改动，不构成上游作品的替代品
+
+4. 如需使用上游应用源码，请自行访问上游仓库，并遵从原作者的意愿。
+   在原作者补充明确许可协议之前，请勿重新分发上游源码。
+
+5. 上游作者声明「随时可能删库」。本仓库不对上游仓库的持续可用性作任何保证。
