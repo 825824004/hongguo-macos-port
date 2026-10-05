@@ -10,7 +10,7 @@
 | `patches/macos-port-dart.patch` | 本人编写 | 仅为适配 macOS 所需的最小改动，不含上游完整源码 |
 | `scripts/build-macos.sh` | 本人编写 | 构建与 ad-hoc 签名脚本 |
 | `scripts/env.sh` | 本人编写 | 构建环境变量 |
-| `README.md`、`LICENSE`、`NOTICE` | 本人编写 | 说明与声明文档 |
+| `README.md`、`LICENSE`、`UPSTREAM.md`、`NOTICE` | 本人编写 | 说明与声明文档 |
 
 ## 本仓库不包含的内容
 

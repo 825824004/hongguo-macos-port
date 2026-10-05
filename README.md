@@ -183,7 +183,8 @@ open build/macos/Build/Products/Release/duanjuapp.app
 ```
 hongguo-macos-port/
 ├── README.md                       本文件
-├── LICENSE                         MIT（仅覆盖本仓库成果）+ 上游许可状态说明
+├── LICENSE                         MIT（覆盖本仓库成果）
+├── UPSTREAM.md                     上游项目与许可状态说明
 ├── NOTICE                          第三方组件与来源声明
 ├── macos-platform/                 macOS 平台工程（Flutter 模板 + 我的配置）
 ├── patches/
