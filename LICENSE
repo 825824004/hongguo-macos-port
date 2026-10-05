@@ -2,9 +2,6 @@ MIT License
 
 Copyright (c) 2026 hongguo-macos-port contributors
 
-本仓库仅包含 macOS 移植工程成果（平台配置、补丁、构建脚本、文档），
-不包含上游 zhoufuweigg/guoapp 的应用源码。
-
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -22,3 +19,15 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+附加说明（非许可条款）
+
+本仓库仅包含 macOS 移植工程成果（平台配置、补丁、构建脚本、文档），
+不包含上游 zhoufuweigg/guoapp 的应用源码。
+
+上游项目未附带任何 LICENSE 文件，本仓库亦不分发其源码。
+详见 [UPSTREAM.md](UPSTREAM.md) 与 [NOTICE](NOTICE)。
+
+上述 MIT 许可仅适用于本仓库自身的原创内容。
