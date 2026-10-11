@@ -1,0 +1,38 @@
+# 构建产物
+build/
+dist/
+*.dSYM/
+*.app/
+
+# 编译出的原生库（由 scripts/build_native.py 生成，不入库）
+*.dylib
+*.so
+*.dll
+native/build/
+
+# macOS 工程生成物
+macos-platform/Flutter/ephemeral/
+macos-platform/Pods/
+macos-platform/Podfile.lock.bak
+macos-platform/Runner.xcworkspace/xcuserdata/
+macos-platform/Runner.xcodeproj/xcuserdata/
+macos-platform/Runner.xcodeproj/project.xcworkspace/xcuserdata/
+macos-platform/*.iml
+macos-platform/macos/
+
+# 工具链与缓存
+toolchain/
+cache/
+.pub-cache/
+.dart_tool/
+.packages
+
+# 签名与证书
+*.mobileprovision
+*.p12
+*.cer
+*.entitlements.local
+
+# macOS
+.DS_Store
+._*
