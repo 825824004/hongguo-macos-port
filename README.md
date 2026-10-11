@@ -67,6 +67,16 @@ flutter create --platforms=macos --org com.phoenix --project-name duanjuapp .
 - **`lib/player_screen.dart`** — 全屏逻辑扩展到 macOS（原本仅 Windows）；关闭硬件加速，对齐上游 iOS 端规避 libmpv 渲染崩溃的处理
 - **`lib/lan_controller.dart`** — 设备名增加 `Mac` 分支
 
+### 2.5 关键修复（实测问题定位后追加）
+
+以下三项均为播放链路实测失败后定位并修复的问题：
+
+| 问题 | 根因 | 修复 |
+| --- | --- | --- |
+| **播放报"暂时无法播放"** | 上游把 progressive MP4 按 HLS 解析，`app_stream.go` 因内容缺少 `#EXTM3U` 头返回 502 | 改为用 `bufio.Reader.Peek` 探测真实内容头，非播放列表则按普通媒体流式透传 |
+| **进程崩溃（SIGABRT）** | mpv `m_config_cache_from_shadow` 断言失败。`_player.stop()` 只是异步命令，`stream_create` 仍在运行时又连续下发 `setProperty` 与 `open`，config cache 被并发读写 | 新增 `_awaitPlayerIdle()`，在设置属性与 open 前轮询等待播放器退出 playing/buffering |
+| **点击播放无反馈导致重复触发** | `openPlaybackDirectly` 把 `repository.detail()` 网络请求放在导航之前，加载期间首页无变化，用户重复点击后多个播放请求互相挤掉 | 改为立即跳转 `PlaybackLaunchScreen`，并增加分阶段进度提示（获取剧集信息 → 解析播放地址） |
+
 ### 3. Go 原生核心
 
 上游 `scripts/build_native.py` **已内置 `darwin` 分支**，无需修改：

@@ -105,11 +105,187 @@ index a698e46..f2c74c1 100644
                  ? 'computer'
                  : 'phone',
            );
+diff --git a/lib/playback_launch_screen.dart b/lib/playback_launch_screen.dart
+index 877cc5c..1c6d471 100644
+--- a/lib/playback_launch_screen.dart
++++ b/lib/playback_launch_screen.dart
+@@ -9,82 +9,31 @@ import 'models.dart';
+ import 'player_screen.dart';
+ import 'widgets.dart';
+ 
++/// 打开播放。
++///
++/// 必须先跳转到 [PlaybackLaunchScreen] 再做网络请求。此前把
++/// `repository.detail()` 放在导航之前，加载期间首页毫无变化，用户会以为
++/// 点击无效而重复点击，导致多个播放请求并发、互相挤掉。
+ Future<void> openPlaybackDirectly(
+   BuildContext context, {
+   required Drama drama,
+   required AppRepository repository,
+   required LocalStore store,
+ }) async {
+-  final profileEpoch = store.profileEpoch;
+-  try {
+-    final detail = await repository.detail(drama);
+-    if (!context.mounted || profileEpoch != store.profileEpoch) return;
+-    final mergedDrama = repository.catalogUpdates
+-        .current(drama)
+-        .merge(detail.drama);
+-    final merged = DramaDetail(
+-      mergedDrama,
+-      detail.episodes,
+-      warning: detail.warning,
+-    );
+-    repository.catalogUpdates.publish(mergedDrama, retryCover: true);
+-    await saveUserChange(context, () => store.refreshDrama(mergedDrama));
+-    if (!context.mounted || profileEpoch != store.profileEpoch) return;
+-    if (merged.episodes.isEmpty) {
+-      throw AppFailure('暂时没有可播放的集数');
+-    }
+-    final watched = store.watched(mergedDrama.id);
+-    final index = resumeEpisodeIndex(merged.episodes, watched);
+-    final episode = merged.episodes[index];
+-    if (episode.vip && mergedDrama.source != SourceSite.dsd.id) {
+-      final accepted = await showDialog<bool>(
+-        context: context,
+-        builder: (context) => AlertDialog(
+-          title: const Text('这是一集 VIP 内容'),
+-          content: const Text('站源可能只提供试看或限制播放。'),
+-          actions: [
+-            TextButton(
+-              onPressed: () => Navigator.pop(context, false),
+-              child: const Text('取消'),
+-            ),
+-            FilledButton(
+-              onPressed: () => Navigator.pop(context, true),
+-              child: const Text('尝试播放'),
+-            ),
+-          ],
+-        ),
+-      );
+-      if (accepted != true || !context.mounted) return;
+-    }
+-    final position =
+-        watched?.episode == episode.number && watched?.finished == false
+-        ? watched!.position
+-        : 0.0;
+-    if (!context.mounted || profileEpoch != store.profileEpoch) return;
+-    await Navigator.of(context).push(
+-      MaterialPageRoute<void>(
+-        builder: (_) => PlayerScreen(
+-          detail: merged,
+-          initialIndex: index,
+-          initialPosition: position,
+-          repository: repository,
+-          store: store,
+-        ),
++  await Navigator.of(context).push(
++    MaterialPageRoute<void>(
++      builder: (_) => PlaybackLaunchScreen(
++        drama: drama,
++        repository: repository,
++        store: store,
+       ),
+-    );
+-  } catch (error) {
+-    if (!context.mounted || profileEpoch != store.profileEpoch) return;
+-    repository.catalogUpdates.publish(
+-      repository.catalogUpdates.current(drama),
+-      retryCover: true,
+-    );
+-    final message = error is AppFailure ? error.message : '暂时无法播放，请重试';
+-    ScaffoldMessenger.of(
+-      context,
+-    ).showSnackBar(SnackBar(content: Text(message)));
+-  }
++    ),
++  );
+ }
+ 
++/// 已启动的播放加载页数量，用于避免重复进入。
++int playbackLaunchCount = 0;
++
+ class PlaybackLaunchScreen extends StatefulWidget {
+   const PlaybackLaunchScreen({
+     super.key,
+@@ -106,6 +55,9 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
+   int _generation = 0;
+   String? _error;
+ 
++  /// 加载阶段说明。网络慢时让用户知道卡在哪一步，避免误以为点击无效。
++  String _stage = '正在准备播放';
++
+   @override
+   void initState() {
+     super.initState();
+@@ -119,10 +71,15 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
+     super.dispose();
+   }
+ 
++  void _setStage(String stage) {
++    if (mounted) setState(() => _stage = stage);
++  }
++
+   Future<void> _load() async {
+     final generation = ++_generation;
+     setState(() => _error = null);
+     try {
++      _setStage('正在获取《${widget.drama.title}》剧集信息');
+       final detail = await widget.repository.detail(widget.drama);
+       if (!mounted ||
+           generation != _generation ||
+@@ -148,6 +105,7 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
+         setState(() => _error = '暂时没有可播放的集数');
+         return;
+       }
++      _setStage('正在解析播放地址');
+       final watched = widget.store.watched(drama.id);
+       final index = resumeEpisodeIndex(merged.episodes, watched);
+       final episode = merged.episodes[index];
+@@ -214,18 +172,24 @@ class _PlaybackLaunchScreenState extends State<PlaybackLaunchScreen> {
+     body: SafeArea(
+       top: false,
+       child: _error == null
+-          ? const Center(
++          ? Center(
+               child: Column(
+                 mainAxisSize: MainAxisSize.min,
+                 children: [
+                   CircularProgressIndicator(),
+                   SizedBox(height: 16),
+                   Text('正在进入播放'),
++                  SizedBox(height: 6),
++                  Text(
++                    _stage,
++                    style: Theme.of(context).textTheme.bodySmall,
++                    textAlign: TextAlign.center,
++                  ),
+                 ],
+               ),
+             )
+           : StatusPanel(
+-              title: '暂时无法播放',
++              title: '播放失败',
+               message: _error!,
+               onRetry: _load,
+               action: '重试',
 diff --git a/lib/player_screen.dart b/lib/player_screen.dart
-index dcebf72..7e18601 100644
+index dcebf72..b243ea4 100644
 --- a/lib/player_screen.dart
 +++ b/lib/player_screen.dart
-@@ -194,7 +194,7 @@ class _PlayerScreenState extends State<PlayerScreen>
+@@ -119,6 +119,11 @@ class _PlayerScreenState extends State<PlayerScreen>
+   bool _pendingError = false;
+   bool _pictureInPictureSupported = false;
+   bool _pictureInPictureActive = false;
++
++  /// 播放器上报的原始错误。mpv 的失败是异步的（open 成功、拉流失败），
++  /// 会走 stream.error 而非抛异常，因此这里显式保留，供最终失败时展示。
++  String? _lastPlaybackError;
++  int _playbackErrorCount = 0;
+   bool _pictureInPictureRequested = false;
+   bool _pictureInPictureHandlerInstalled = false;
+   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
+@@ -194,7 +199,7 @@ class _PlayerScreenState extends State<PlayerScreen>
          ? VideoController(
              _player,
              configuration: VideoControllerConfiguration(
@@ -118,7 +294,182 @@ index dcebf72..7e18601 100644
              ),
            )
          : null;
-@@ -1147,7 +1147,7 @@ class _PlayerScreenState extends State<PlayerScreen>
+@@ -233,7 +238,14 @@ class _PlayerScreenState extends State<PlayerScreen>
+     _subscriptions.add(
+       _player.stream.error.listen((error) {
+         if (_enhancement.handlePlaybackError(error)) return;
+-        if (!_closed && _acceptErrors && mounted && error.trim().isNotEmpty) {
++        // 保留播放器的原始错误，避免被「自动恢复未成功」这类通用文案覆盖
++        final trimmed = error.trim();
++        if (trimmed.isNotEmpty) {
++          _lastPlaybackError = trimmed;
++          _playbackErrorCount++;
++          DiaryService.add('[Play] 播放器上报错误 #$_playbackErrorCount: $trimmed');
++        }
++        if (!_closed && _acceptErrors && mounted && trimmed.isNotEmpty) {
+           _queueRecovery();
+         }
+       }),
+@@ -788,6 +800,8 @@ class _PlayerScreenState extends State<PlayerScreen>
+     _danmaku.setPlan(null);
+     _errorTimer?.cancel();
+     _pendingError = false;
++    _lastPlaybackError = null;
++    _playbackErrorCount = 0;
+     final position = _currentPosition;
+     final action = current.local
+         ? PlaybackRecoveryAction.stop
+@@ -810,6 +824,7 @@ class _PlayerScreenState extends State<PlayerScreen>
+         });
+       } catch (_) {}
+       if (mounted && !_closed && ticket == _generation) {
++        final detail = _lastPlaybackError;
+         setState(() {
+           _loading = false;
+           _localFailure = current.local;
+@@ -817,6 +832,8 @@ class _PlayerScreenState extends State<PlayerScreen>
+               ? widget.allowOnlineFallback
+                     ? '本地视频读取失败，请重试或重新下载；也可以手动改为在线播放。'
+                     : '本地成品读取失败，请重试或重新生成。'
++              : detail != null && detail.isNotEmpty
++              ? '已重试 $_playbackErrorCount 次均失败。\n播放器错误：$detail'
+               : '自动恢复未成功，请检查网络后重试，也可换一集或选择其他清晰度。';
+         });
+       }
+@@ -885,6 +902,24 @@ class _PlayerScreenState extends State<PlayerScreen>
+     }
+   }
+ 
++  /// 等待播放器退出「正在播放/正在加载」状态。
++  ///
++  /// mpv 的 stop / open 都是异步命令，直接连续调用会让 worker 线程上的
++  /// stream_create 与 config 写入重叠，触发断言崩溃。这里轮询播放状态，
++  /// 直到既不 playing 也不 buffering，或超时（超时不阻塞，仅放行）。
++  Future<void> _awaitPlayerIdle() async {
++    const timeout = Duration(seconds: 3);
++    const interval = Duration(milliseconds: 50);
++    final deadline = DateTime.now().add(timeout);
++    while (DateTime.now().isBefore(deadline)) {
++      if (_closed) return;
++      final state = _player.state;
++      final busy = state.playing || state.buffering;
++      if (!busy) return;
++      await Future<void>.delayed(interval);
++    }
++  }
++
+   Future<void> _serialize(Future<void> Function() operation) {
+     final next = _operations.catchError((Object _) {}).then((_) => operation());
+     _operations = next;
+@@ -1001,46 +1036,61 @@ class _PlayerScreenState extends State<PlayerScreen>
+         }
+         final platform = _player.platform;
+         if (platform is NativePlayer) {
++          // 等待上一个媒体真正退出。
++          // _player.stop() 只是异步下发命令，mpv 的 stream_create 可能仍在
++          // 运行；此时若继续 setProperty / open，config cache 会被并发读写，
++          // 触发 m_config_cache_from_shadow 断言使进程 abort（已实测复现）。
++          await _awaitPlayerIdle();
++          if (_closed || ticket != _generation) return;
++
++          // 批量下发 mpv 属性。
++          // 此前逐条 setProperty，每次都是一次命令往返；快速切换播放时旧的
++          // 命令仍在队列中，新的 stream 已开始创建，同样会踩坏 config cache。
++          final properties = <String, String>{};
+           if (Platform.isAndroid) {
+             if (_television) {
+-              await platform.setProperty('hwdec', 'mediacodec');
+-              await platform.setProperty('hwdec-codecs', 'all');
+-              await platform.setProperty('opengl-pbo', 'yes');
+-              await platform.setProperty('video-latency-hacks', 'yes');
+-              await platform.setProperty('scale', 'bilinear');
+-              await platform.setProperty('cscale', 'bilinear');
+-              await platform.setProperty('dscale', 'bilinear');
+-              await platform.setProperty('correct-downscaling', 'no');
+-              await platform.setProperty('vd-lavc-skiploopfilter', 'all');
+-              await platform.setProperty('vd-lavc-skipidct', 'all');
+-              await platform.setProperty('vd-lavc-threads', '2');
+-              await platform.setProperty('demuxer-max-bytes', '${4 * 1024 * 1024}');
+-              await platform.setProperty('demuxer-max-back-bytes', '${1 * 1024 * 1024}');
+-              await platform.setProperty('demuxer-readahead-secs', '5');
++              properties.addAll({
++                'hwdec': 'mediacodec',
++                'hwdec-codecs': 'all',
++                'opengl-pbo': 'yes',
++                'video-latency-hacks': 'yes',
++                'scale': 'bilinear',
++                'cscale': 'bilinear',
++                'dscale': 'bilinear',
++                'correct-downscaling': 'no',
++                'vd-lavc-skiploopfilter': 'all',
++                'vd-lavc-skipidct': 'all',
++                'vd-lavc-threads': '2',
++                'demuxer-max-bytes': '${4 * 1024 * 1024}',
++                'demuxer-max-back-bytes': '${1 * 1024 * 1024}',
++                'demuxer-readahead-secs': '5',
++              });
+             } else {
+-              await platform.setProperty('hwdec', 'auto-safe');
+-              await platform.setProperty('hwdec-codecs', 'all');
+-              await platform.setProperty('vd-lavc-skiploopfilter', 'nonkey');
+-              await platform.setProperty('vd-lavc-threads', '4');
++              properties.addAll({
++                'hwdec': 'auto-safe',
++                'hwdec-codecs': 'all',
++                'vd-lavc-skiploopfilter': 'nonkey',
++                'vd-lavc-threads': '4',
++              });
+             }
+-            await platform.setProperty('vd-lavc-fast', 'yes');
+-            await platform.setProperty('video-sync', 'audio');
+-            await platform.setProperty('framedrop', 'vo');
++            properties['vd-lavc-fast'] = 'yes';
++            properties['video-sync'] = 'audio';
++            properties['framedrop'] = 'vo';
++          }
++          properties['demuxer-lavf-o'] = [
++            'seg_max_retry=3',
++            'strict=experimental',
++            'allowed_extensions=ALL',
++            plan.local
++                ? 'protocol_whitelist=[file,crypto,data]'
++                : 'protocol_whitelist=[http,https,tcp,tls,crypto,data,file]',
++            if (plan.decryptionKey.isNotEmpty)
++              'decryption_key=${plan.decryptionKey}',
++          ].join(',');
++          properties['network-timeout'] = '20';
++          for (final entry in properties.entries) {
++            await platform.setProperty(entry.key, entry.value);
+           }
+-          await platform.setProperty(
+-            'demuxer-lavf-o',
+-            [
+-              'seg_max_retry=3',
+-              'strict=experimental',
+-              'allowed_extensions=ALL',
+-              plan.local
+-                  ? 'protocol_whitelist=[file,crypto,data]'
+-                  : 'protocol_whitelist=[http,https,tcp,tls,crypto,data,file]',
+-              if (plan.decryptionKey.isNotEmpty)
+-                'decryption_key=${plan.decryptionKey}',
+-            ].join(','),
+-          );
+-          await platform.setProperty('network-timeout', '20');
+         }
+         _plan = plan;
+         installed = true;
+@@ -1090,7 +1140,9 @@ class _PlayerScreenState extends State<PlayerScreen>
+               _localFailure =
+                   (error is AppFailure && error.code == 'local_media') ||
+                   (widget.localOnly && !_forceOnline);
+-              _error = error is AppFailure ? error.message : '无法播放这一集，请重试或换一集。';
++              _error = error is AppFailure
++                  ? error.message
++                  : '无法播放这一集：${error.runtimeType}: $error';
+               widget.handoff?.fail(_error!);
+             });
+           }
+@@ -1147,7 +1199,7 @@ class _PlayerScreenState extends State<PlayerScreen>
        _automaticFullscreenSuppressed = !fullscreen;
      });
      try {
@@ -127,7 +478,7 @@ index dcebf72..7e18601 100644
          await windowManager.setFullScreen(fullscreen);
        } else if (_mobile) {
          await (_orientationController?.setPlayback(
-@@ -1481,7 +1481,7 @@ class _PlayerScreenState extends State<PlayerScreen>
+@@ -1481,7 +1533,7 @@ class _PlayerScreenState extends State<PlayerScreen>
          await _player.dispose();
        }),
      );
@@ -136,3 +487,12 @@ index dcebf72..7e18601 100644
        unawaited(windowManager.setFullScreen(false));
      } else if (_mobile || _television && Platform.isAndroid) {
        unawaited(
+@@ -1757,7 +1809,7 @@ class _PlayerScreenState extends State<PlayerScreen>
+                 ColoredBox(
+                   color: Colors.black.withValues(alpha: .9),
+                   child: StatusPanel(
+-                    title: '暂时无法播放',
++                    title: '播放失败',
+                     message: _error!,
+                     onRetry: () => _retry(),
+                     action: _localFailure ? '重试本地播放' : '重试播放',

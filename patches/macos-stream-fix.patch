@@ -1,0 +1,129 @@
+diff --git a/native/core/app_stream.go b/native/core/app_stream.go
+index f58a21c..42fea9a 100644
+--- a/native/core/app_stream.go
++++ b/native/core/app_stream.go
+@@ -8,10 +8,13 @@ import (
+ 	"crypto/sha256"
+ 	"encoding/hex"
+ 	"errors"
++	"fmt"
++	"path/filepath"
+ 	"io"
+ 	"net"
+ 	"net/http"
+ 	"net/url"
++	"os"
+ 	"path"
+ 	"regexp"
+ 	"strings"
+@@ -19,6 +22,28 @@ import (
+ 	"time"
+ )
+ 
++// streamLog 把诊断信息写到固定文件。
++// 用 fmt.Printf 时 stdout 在 `open` 启动下无处可去，改为落盘便于排查。
++func streamLog(format string, args ...any) {
++	line := time.Now().Format("15:04:05.000") + " " + fmt.Sprintf(format, args...)
++	// 沙箱内 /tmp 不可写，改用容器 home 下必然可写的位置。
++	home, err := os.UserHomeDir()
++	if err != nil {
++		return
++	}
++	paths := []string{
++		filepath.Join(home, "Library", "Caches", "duanju-stream.log"),
++		filepath.Join(os.TempDir(), "duanju-stream.log"),
++	}
++	for _, p := range paths {
++		if f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
++			fmt.Fprintln(f, line)
++			f.Close()
++			return
++		}
++	}
++}
++
+ type nativeStreamAsset struct {
+ 	address     string
+ 	data        []byte
+@@ -231,6 +256,7 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
+ 	}
+ 	stream.mu.Unlock()
+ 	if session == nil {
++		streamLog("会话不存在 token=%s asset=%s", parts[0], parts[1])
+ 		http.Error(writer, "播放已结束", http.StatusGone)
+ 		return
+ 	}
+@@ -238,9 +264,12 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
+ 	asset, found := session.assets[parts[1]]
+ 	session.mu.Unlock()
+ 	if !found {
++		streamLog("资产不存在 token=%s asset=%s", parts[0], parts[1])
+ 		http.NotFound(writer, request)
+ 		return
+ 	}
++	streamLog("请求资产 token=%s asset=%s address=%s contentType=%s dataLen=%d",
++			parts[0], parts[1], asset.address, asset.contentType, len(asset.data))
+ 	ctx, cancel := context.WithCancel(providerMediaContext(request.Context(), session.credentials))
+ 	defer cancel()
+ 	stop := context.AfterFunc(session.ctx, cancel)
+@@ -286,6 +315,7 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
+ 	}
+ 	response, err := stream.nativeRequest(upstream)
+ 	if err != nil {
++		streamLog("上游拉取失败 host=%s path=%s err=%v", upstream.URL.Host, upstream.URL.Path, err)
+ 		http.Error(writer, "读取媒体失败，请重试", http.StatusBadGateway)
+ 		return
+ 	}
+@@ -293,6 +323,9 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
+ 	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusPartialContent {
+ 		body, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
+ 		err := stream.downloader.catalogResponseError(upstream, response, body)
++		streamLog("上游返回异常 status=%d host=%s path=%s body=%s",
++				response.StatusCode, upstream.URL.Host, upstream.URL.Path,
++				strings.TrimSpace(string(body)))
+ 		http.Error(writer, err.Error(), response.StatusCode)
+ 		return
+ 	}
+@@ -303,10 +336,18 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
+ 	}
+ 	playlist := strings.Contains(asset.contentType, "mpegurl") || strings.Contains(contentType, "mpegurl") || strings.HasSuffix(strings.ToLower(finalURL.Path), ".m3u8") || strings.Contains(strings.ToLower(finalURL.String()), "m3u8") || len(session.key) > 0
+ 	reader := bufio.NewReader(response.Body)
+-	if !playlist && request.Method == http.MethodGet {
++	if request.Method == http.MethodGet {
++		// 以真实内容为准修正判定：上游可能把 progressive MP4 也按 m3u8 下发
++		// （红果的部分片源即是如此，URL 带 mime_type=video_mp4）。
++		// 此时若仍按播放列表解析会因缺少 #EXTM3U 头而返回 502。
+ 		peek, _ := reader.Peek(512)
+-		if strings.HasPrefix(strings.TrimSpace(strings.TrimPrefix(string(peek), "\ufeff")), "#EXTM3U") {
++		peekText := strings.TrimSpace(strings.TrimPrefix(string(peek), "\ufeff"))
++		if strings.HasPrefix(peekText, "#EXTM3U") {
+ 			playlist = true
++		} else if playlist {
++			streamLog("内容非播放列表，按普通媒体流转式输出 host=%s path=%s contentType=%s peek=%q",
++				upstream.URL.Host, upstream.URL.Path, contentType, peekText)
++			playlist = false
+ 		}
+ 	}
+ 	if playlist && request.Method == http.MethodHead {
+@@ -317,16 +358,21 @@ func (stream *nativeStreamServer) nativeServe(writer http.ResponseWriter, reques
+ 	if playlist && request.Method == http.MethodGet {
+ 		body, err := io.ReadAll(io.LimitReader(reader, 4<<20+1))
+ 		if err != nil || len(body) > 4<<20 {
++			streamLog("播放列表读取失败或过大 host=%s len=%d err=%v",
++				upstream.URL.Host, len(body), err)
+ 			http.Error(writer, "播放列表过大或读取失败", http.StatusBadGateway)
+ 			return
+ 		}
+ 		text := strings.TrimSpace(strings.TrimPrefix(string(body), "\ufeff"))
+ 		if !strings.HasPrefix(text, "#EXTM3U") {
++			streamLog("播放列表无效 host=%s len=%d head=%q",
++				upstream.URL.Host, len(body), text)
+ 			http.Error(writer, "播放列表无效", http.StatusBadGateway)
+ 			return
+ 		}
+ 		rewritten, err := stream.nativeRewrite(parts[0], session, text, finalURL.String())
+ 		if err != nil {
++			streamLog("播放列表改写失败 host=%s err=%v", upstream.URL.Host, err)
+ 			http.Error(writer, err.Error(), http.StatusBadGateway)
+ 			return
+ 		}
